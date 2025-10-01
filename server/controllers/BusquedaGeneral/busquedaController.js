@@ -12,7 +12,7 @@ export const consultarPosts = async (req, res) => {
     }
 }
 
-export const mostrarPost = async (req, res) => {
+export const mostrarPostDetalles = async (req, res) => {
     try {
         const {id_post} = req.params;
         const [postQuery] = await pool.query(`SELECT POST.*, GROUP_CONCAT(TAGS.NOMBRE SEPARATOR ', ') AS TAGS FROM POST 
@@ -60,6 +60,70 @@ export const mostrarPost = async (req, res) => {
         console.log("error", err);
         return res.status(500).json({
             message: "Ha ocurrido un error al mostrar los Posts",
+        });
+    }
+}
+
+export const listarPosts = async (req, res) => {
+    try {
+        const [postsQuery] = await pool.query(`SELECT ID, TITULO FROM POST;`)
+        const [gruposQuery] = await pool.query(`SELECT * FROM GRUPO_TAGS;`)
+
+        for (const p of postsQuery) {
+            for (const g of gruposQuery) {
+                const [filtrarGruposQuery] = await pool.query(`SELECT TAGS.* FROM POST_TAGS 
+                    INNER JOIN TAGS ON POST_TAGS.ID_TAG = TAGS.ID
+                    INNER JOIN GRUPO_TAGS ON TAGS.ID_GRUPO = GRUPO_TAGS.ID
+                    WHERE ID_POST = ? AND GRUPO_TAGS.ID = ?`, [p.ID, g.ID])
+
+                if (g.ID === 3) {
+                    const creadoresPropios = filtrarGruposQuery
+                        .filter(cre => cre.TIPO_TAG === "PROPIO")
+                        .map(cre => cre.NOMBRE)
+                        .join(', ');
+                    const creadoresCompañia = filtrarGruposQuery
+                        .filter(cre => cre.TIPO_TAG === "COMPAÑIA")
+                        .map(cre => cre.NOMBRE)
+                        .join(', ');
+
+                    p.creador_propio = creadoresPropios
+                    p.creadores_compañia = creadoresCompañia
+                }
+
+                const filtracionTags = filtrarGruposQuery
+                    .map(cre => cre.NOMBRE)
+                    .join(', ');
+
+                p[g.TITULO_GRUPO_TAG] = filtracionTags
+            }
+        }
+        
+        return res.status(200).send({message: "OK!!!", data: postsQuery})
+    } catch (err) {
+        console.log("error", err);
+        return res.status(500).json({
+            message: "Ha ocurrido un error al listar los Posts",
+        });
+    }
+}
+
+export const listarEtiquetasDinamico = async (req, res) => {
+    try {
+        const [gruposQuery] = await pool.query(`SELECT * FROM GRUPO_TAGS;`)
+
+        for (const grupo of gruposQuery) {
+            const [tags1] = await pool.query(`SELECT T.* FROM TAGS T
+                INNER JOIN GRUPO_TAGS GT1 ON T.ID_GRUPO = GT1.ID
+                INNER JOIN TAG_RELACIONES T1 ON T.ID = T1.ID_TAG_1
+                INNER JOIN (SELECT TA1.*, GT1.TITULO_GRUPO_TAG AS GRUPO_TAG_1 FROM TAGS TA1
+                                INNER JOIN GRUPO_TAGS GT1 ON TA1.ID_GRUPO = GT1.ID) TA1 ON T1.ID_TAG_2 = TA1.ID
+                WHERE GT1.ID = 4
+                GROUP BY T.ID;`, [grupo.ID])
+        }
+    } catch (err) {
+        console.log("error", err);
+        return res.status(500).json({
+            message: "Ha ocurrido un error al listar las etiquetas dinámicas",
         });
     }
 }
