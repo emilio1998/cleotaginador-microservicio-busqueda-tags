@@ -107,19 +107,72 @@ export const listarPosts = async (req, res) => {
     }
 }
 
+export const listarGruposTags = async (req, res) => {
+    try {
+        const [gruposTagsQuery] = await pool.query(`SELECT * FROM GRUPO_TAGS;`)
+        return res.status(200).send({message: "Consulat Exitosa!!", grupos: gruposTagsQuery})
+    } catch (err) {
+        console.log("error", err);
+        return res.status(500).json({
+            message: "Ha ocurrido un error al listar las etiquetas dinámicas",
+        });
+    }
+}
+
 export const listarEtiquetasDinamico = async (req, res) => {
     try {
-        const [gruposQuery] = await pool.query(`SELECT * FROM GRUPO_TAGS;`)
+        const {id_grupo} = req.params;
 
-        for (const grupo of gruposQuery) {
-            const [tags1] = await pool.query(`SELECT T.* FROM TAGS T
+        const [tags1] = await pool.query(`SELECT T.* FROM TAGS T
+            INNER JOIN GRUPO_TAGS GT1 ON T.ID_GRUPO = GT1.ID
+            INNER JOIN TAG_RELACIONES T1 ON T.ID = T1.ID_TAG_1
+            INNER JOIN (SELECT TA1.*, GT1.TITULO_GRUPO_TAG AS GRUPO_TAG_1 FROM TAGS TA1
+                            INNER JOIN GRUPO_TAGS GT1 ON TA1.ID_GRUPO = GT1.ID) TA1 ON T1.ID_TAG_2 = TA1.ID
+            WHERE GT1.ID = ?
+            GROUP BY T.ID;`, [id_grupo])
+
+        const [tags2] = await pool.query(`SELECT T.* FROM TAGS T
+            INNER JOIN GRUPO_TAGS GT2 ON T.ID_GRUPO = GT2.ID
+            INNER JOIN TAG_RELACIONES T2 ON T.ID = T2.ID_TAG_2
+            INNER JOIN (SELECT TA2.*, GT2.TITULO_GRUPO_TAG AS GRUPO_TAG_2 FROM TAGS TA2
+                            INNER JOIN GRUPO_TAGS GT2 ON TA2.ID_GRUPO = GT2.ID) TA2 ON T2.ID_TAG_1 = TA2.ID
+            WHERE GT2.ID = ?
+            GROUP BY T.ID;`, [id_grupo])
+
+        // Unir ambos arrays y eliminar duplicados por ID
+        const tagsUnificados = [...tags1, ...tags2];
+        const tagsUnicos = Array.from(
+            new Map(tagsUnificados.map(tag => [tag.ID, tag])).values()
+        );
+        
+        let almacenarSubTags = [];
+        
+        for (const tag of tagsUnicos) {
+            const [subTags1] = await pool.query(`SELECT T1.ID AS ID_ASINGNACION, T.*, GT1.TITULO_GRUPO_TAG AS GRUPO_TAG_1, TA1.NOMBRE AS NOMBRE_2, TA1.GRUPO_TAG_2, TA1.ID_GRUPO_2 FROM TAGS T
                 INNER JOIN GRUPO_TAGS GT1 ON T.ID_GRUPO = GT1.ID
                 INNER JOIN TAG_RELACIONES T1 ON T.ID = T1.ID_TAG_1
-                INNER JOIN (SELECT TA1.*, GT1.TITULO_GRUPO_TAG AS GRUPO_TAG_1 FROM TAGS TA1
+                INNER JOIN (SELECT TA1.*, GT1.ID AS ID_GRUPO_2, GT1.TITULO_GRUPO_TAG AS GRUPO_TAG_2 FROM TAGS TA1
                                 INNER JOIN GRUPO_TAGS GT1 ON TA1.ID_GRUPO = GT1.ID) TA1 ON T1.ID_TAG_2 = TA1.ID
-                WHERE GT1.ID = 4
-                GROUP BY T.ID;`, [grupo.ID])
+                WHERE GT1.ID = ? AND T.ID = ? AND T.ID_GRUPO <> TA1.ID_GRUPO_2
+                ORDER BY T.ID;`, [id_grupo, tag.ID])
+
+            const [subTags2] = await pool.query(`SELECT T2.ID AS ID_ASINGNACION, T.*, GT2.TITULO_GRUPO_TAG AS GRUPO_TAG_2, TA2.NOMBRE AS NOMBRE_1, TA2.GRUPO_TAG_1, TA2.ID_GRUPO_1 FROM TAGS T
+                INNER JOIN GRUPO_TAGS GT2 ON T.ID_GRUPO = GT2.ID
+                INNER JOIN TAG_RELACIONES T2 ON T.ID = T2.ID_TAG_2
+                INNER JOIN (SELECT TA2.*, GT2.ID AS ID_GRUPO_1, GT2.TITULO_GRUPO_TAG AS GRUPO_TAG_1 FROM TAGS TA2
+                                INNER JOIN GRUPO_TAGS GT2 ON TA2.ID_GRUPO = GT2.ID) TA2 ON T2.ID_TAG_1 = TA2.ID
+                WHERE GT2.ID = ? AND T.ID = ? AND T.ID_GRUPO <> TA2.ID_GRUPO_1
+                ORDER BY T.ID;`, [id_grupo, tag.ID])
+
+            const subTagsUnificados = [...subTags1, ...subTags2];
+            almacenarSubTags.push(...subTags1, ...subTags2);
+            const subTagsUnicos = Array.from(
+                new Map(subTagsUnificados.map(subTag => [subTag.ID_ASINGNACION, subTag])).values()
+            );
+            tag.subTags = subTagsUnicos;
         }
+
+        return res.status(200).send({message: "OK!!", data: tagsUnicos})
     } catch (err) {
         console.log("error", err);
         return res.status(500).json({
