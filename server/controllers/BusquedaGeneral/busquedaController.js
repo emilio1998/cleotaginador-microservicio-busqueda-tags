@@ -180,3 +180,16 @@ export const listarEtiquetasDinamico = async (req, res) => {
         });
     }
 }
+
+export const listarTags = async (req, res) => {
+    try {
+        const [tagsQuery] = await pool.query(`SELECT TAGS.ID, TAGS.NOMBRE AS title, COLOR_TEXTO AS color FROM TAGS
+            INNER JOIN GRUPO_TAGS ON TAGS.ID_GRUPO = GRUPO_TAGS.ID;`)
+        return res.status(200).send({message: "OK!!", data: tagsQuery})
+    } catch (err) {
+        console.log("error", err);
+        return res.status(500).json({
+            message: "Ha ocurrido un error al listar las etiquetas",
+        });
+    }
+}
