@@ -110,11 +110,44 @@ export const listarPosts = async (req, res) => {
 export const listarGruposTags = async (req, res) => {
     try {
         const [gruposTagsQuery] = await pool.query(`SELECT * FROM GRUPO_TAGS;`)
-        return res.status(200).send({message: "Consulat Exitosa!!", grupos: gruposTagsQuery})
+        const [todosLosPosts] = await pool.query(`SELECT DISTINCT P.* FROM POST P
+            INNER JOIN (SELECT T.*, PT.ID_POST, GT.TITULO_GRUPO_TAG FROM TAGS T
+            INNER JOIN GRUPO_TAGS GT ON T.ID_GRUPO = GT.ID
+            INNER JOIN POST_TAGS PT ON T.ID = PT.ID_TAG) TJ ON P.ID = TJ.ID_POST;`)
+        return res.status(200).send({message: "Consulat Exitosa!!", grupos: gruposTagsQuery, posts: todosLosPosts})
     } catch (err) {
         console.log("error", err);
         return res.status(500).json({
             message: "Ha ocurrido un error al listar las etiquetas dinámicas",
+        });
+    }
+}
+
+export const listarPostsPorGrupo = async (req, res) => {
+    try {
+        const { id_grupo } = req.params;
+        
+        const [postsQuery] = await pool.query(`SELECT DISTINCT P.* FROM POST P
+        INNER JOIN (SELECT T.*, PT.ID_POST, GT.TITULO_GRUPO_TAG FROM TAGS T
+            INNER JOIN GRUPO_TAGS GT ON T.ID_GRUPO = GT.ID
+            INNER JOIN POST_TAGS PT ON T.ID = PT.ID_TAG) TJ ON P.ID = TJ.ID_POST
+        WHERE TJ.ID_GRUPO = ?;`, [id_grupo])
+
+        for (const p of postsQuery) {
+            const [filtrarTagsQuery] = await pool.query(`SELECT TJ.* FROM POST P
+            INNER JOIN (SELECT T.*, PT.ID_POST, GT.TITULO_GRUPO_TAG FROM TAGS T
+                INNER JOIN GRUPO_TAGS GT ON T.ID_GRUPO = GT.ID
+                INNER JOIN POST_TAGS PT ON T.ID = PT.ID_TAG) TJ ON P.ID = TJ.ID_POST
+            WHERE P.ID = ?;`, [p.ID, id_grupo])
+
+            p.etiquetas = filtrarTagsQuery;
+        }
+
+        return res.status(200).send({ message: "Consulta Exitosa!!", data: postsQuery })
+    } catch (err) {
+        console.log("error", err);
+        return res.status(500).json({
+            message: "Ha ocurrido un error al listar los Posts por grupo",
         });
     }
 }
@@ -156,7 +189,7 @@ export const listarEtiquetasDinamico = async (req, res) => {
                 WHERE GT1.ID = ? AND T.ID = ? AND T.ID_GRUPO <> TA1.ID_GRUPO_2
                 ORDER BY T.ID;`, [id_grupo, tag.ID])
 
-            const [subTags2] = await pool.query(`SELECT T2.ID AS ID_ASINGNACION, T.*, GT2.TITULO_GRUPO_TAG AS GRUPO_TAG_2, TA2.NOMBRE AS NOMBRE_1, TA2.GRUPO_TAG_1, TA2.ID_GRUPO_1 FROM TAGS T
+            const [subTags2] = await pool.query(`SELECT T2.ID AS ID_ASINGNACION, T.*, GT2.TITULO_GRUPO_TAG AS GRUPO_TAG_1, TA2.NOMBRE AS NOMBRE_2, TA2.GRUPO_TAG_1 AS GRUPO_TAG_2, TA2.ID_GRUPO_1 AS GRUPO_2 FROM TAGS T
                 INNER JOIN GRUPO_TAGS GT2 ON T.ID_GRUPO = GT2.ID
                 INNER JOIN TAG_RELACIONES T2 ON T.ID = T2.ID_TAG_2
                 INNER JOIN (SELECT TA2.*, GT2.ID AS ID_GRUPO_1, GT2.TITULO_GRUPO_TAG AS GRUPO_TAG_1 FROM TAGS TA2
