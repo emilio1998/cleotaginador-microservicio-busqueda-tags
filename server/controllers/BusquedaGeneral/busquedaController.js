@@ -216,13 +216,50 @@ export const listarEtiquetasDinamico = async (req, res) => {
 
 export const listarTags = async (req, res) => {
     try {
+        const {excluirGrupos} = req.body; // Ids de los grupos a excluir, separados por comas (Where dinamico)
+        let whereDinamico = "";
+        
+        if (excluirGrupos) {
+            const ids = excluirGrupos.split(",");
+            whereDinamico = `WHERE GRUPO_TAGS.ID NOT IN (${ids.join(",")})`;
+        }
+
         const [tagsQuery] = await pool.query(`SELECT TAGS.ID, TAGS.NOMBRE AS title, COLOR_TEXTO AS color FROM TAGS
-            INNER JOIN GRUPO_TAGS ON TAGS.ID_GRUPO = GRUPO_TAGS.ID;`)
+            INNER JOIN GRUPO_TAGS ON TAGS.ID_GRUPO = GRUPO_TAGS.ID ${whereDinamico};`)
         return res.status(200).send({message: "OK!!", data: tagsQuery})
     } catch (err) {
         console.log("error", err);
         return res.status(500).json({
             message: "Ha ocurrido un error al listar las etiquetas",
+        });
+    }
+}
+
+export const listarPostsPorTag = async (req, res) => {
+    try {
+        const { id_tag } = req.params;
+
+        const [postsQuery] = await pool.query(`SELECT DISTINCT p.* FROM POST p
+            INNER JOIN (SELECT t.ID AS ID_TAG, pt.ID_POST, t.NOMBRE AS title, COLOR_TEXTO FROM TAGS t
+                INNER JOIN GRUPO_TAGS gt ON t.ID_GRUPO = gt.ID
+                INNER JOIN POST_TAGS pt ON t.ID = pt.ID_TAG
+                WHERE gt.ID NOT IN (1, 10)) tj ON p.ID = tj.ID_POST
+            WHERE tj.ID_TAG = ?;`, [id_tag]);
+
+        for (const p of postsQuery) {
+            const [filtrarTagsQuery] = await pool.query(`SELECT tj.* FROM POST p
+                INNER JOIN (SELECT t.ID AS ID_TAG, pt.ID_POST, t.NOMBRE AS title, COLOR_TEXTO FROM TAGS t
+                    INNER JOIN GRUPO_TAGS gt ON t.ID_GRUPO = gt.ID
+                    INNER JOIN POST_TAGS pt ON t.ID = pt.ID_TAG
+                    WHERE gt.ID NOT IN (1, 10)) tj ON p.ID = tj.ID_POST
+                WHERE p.ID = ?;`, [p.ID]);
+            p.tags = filtrarTagsQuery;
+        }
+        return res.status(200).send({message: "OK!!", data: postsQuery});
+    } catch (err) {
+        console.log("error", err);
+        return res.status(500).json({
+            message: "Ha ocurrido un error al listar los Posts por tag",
         });
     }
 }
