@@ -239,12 +239,26 @@ export const listarPostsPorTag = async (req, res) => {
     try {
         const { id_tag } = req.params;
 
+        const filtrosPostQuery = []
+        const filtrosPostQueryValues = []
+
+        if (id_tag != 0) {
+            filtrosPostQuery.push(`tj.ID_TAG = ?`);
+            filtrosPostQueryValues.push(id_tag);
+        }
+
+        let query = "";
+        if (filtrosPostQuery.length > 0) {
+            query = filtrosPostQuery.join(" AND ");
+            query = "WHERE " + query;
+        }
+
         const [postsQuery] = await pool.query(`SELECT DISTINCT p.* FROM POST p
             INNER JOIN (SELECT t.ID AS ID_TAG, pt.ID_POST, t.NOMBRE AS title, COLOR_TEXTO FROM TAGS t
                 INNER JOIN GRUPO_TAGS gt ON t.ID_GRUPO = gt.ID
                 INNER JOIN POST_TAGS pt ON t.ID = pt.ID_TAG
                 WHERE gt.ID NOT IN (1, 10)) tj ON p.ID = tj.ID_POST
-            WHERE tj.ID_TAG = ?;`, [id_tag]);
+            ${query};`, filtrosPostQueryValues);
 
         for (const p of postsQuery) {
             const [filtrarTagsQuery] = await pool.query(`SELECT tj.* FROM POST p
