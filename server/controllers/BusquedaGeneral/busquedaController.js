@@ -1,4 +1,13 @@
 import {pool} from '../../lib/db.js'
+import { REPOSITORIO_ARCHIVOS_CLEO } from '../../lib/config.js'
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { listarPostsCarpetas } from '../../lib/serviciosPosts.js'
+import sizeOf from 'image-size';
+import fs from 'node:fs';
+
+const EXTENSIONES_IMAGENES = ['jpg', 'jpeg', 'png', 'gif'];
+const EXTENSIONES_VIDEOS = ['mp4', 'mov', 'avi', 'mkv'];
 
 export const consultarPosts = async (req, res) => {
     try {
@@ -239,8 +248,18 @@ export const listarPostsPorTag = async (req, res) => {
     try {
         const { id_tag } = req.params;
 
+        //Buscar archivos en el repositorio
+        const urlRepo = join(REPOSITORIO_ARCHIVOS_CLEO, 'posts');
+        const carpetas = await listarPostsCarpetas();
+
+
+        // Filtros dinámicos para la consulta de posts en la base de datos
+
         const filtrosPostQuery = []
         const filtrosPostQueryValues = []
+
+        filtrosPostQuery.push(`p.ESTADO = ?`);
+        filtrosPostQueryValues.push(1); // Agregar el valor correspondiente para el estado del post
 
         if (id_tag != 0) {
             filtrosPostQuery.push(`tj.ID_TAG = ?`);
@@ -260,7 +279,13 @@ export const listarPostsPorTag = async (req, res) => {
                 WHERE gt.ID NOT IN (1, 10)) tj ON p.ID = tj.ID_POST
             ${query};`, filtrosPostQueryValues);
 
+        const postsArray = [];
+
         for (const p of postsQuery) {
+
+            const unicoArchivo = p.UNICO_ARCHIVO.readUInt8(0) === 1;
+            const jsonDatosArchivo = p.DATOS_ARCHIVO;
+
             const [filtrarTagsQuery] = await pool.query(`SELECT tj.* FROM POST p
                 INNER JOIN (SELECT t.ID AS ID_TAG, pt.ID_POST, t.NOMBRE AS title, COLOR_TEXTO FROM TAGS t
                     INNER JOIN GRUPO_TAGS gt ON t.ID_GRUPO = gt.ID
@@ -268,12 +293,119 @@ export const listarPostsPorTag = async (req, res) => {
                     WHERE gt.ID NOT IN (1, 10)) tj ON p.ID = tj.ID_POST
                 WHERE p.ID = ?;`, [p.ID]);
             p.tags = filtrarTagsQuery;
+
+            if (!unicoArchivo) {
+                const nombreCarpeta = jsonDatosArchivo.nombreCarpeta;
+                const verificarCarpeta = carpetas.includes(nombreCarpeta);
+
+                if (!verificarCarpeta) {
+                    return res.status(404).json({
+                        message: "La carpeta del post no existe",
+                    });
+                }
+
+                const urlCarpeta = join(urlRepo, nombreCarpeta);
+
+                //Imagenes
+                const urlImagenes = join(urlCarpeta, 'Imagenes');
+                const archivosImagenes = await readdir(urlImagenes, { withFileTypes: true });
+                const imgsCarpetas = archivosImagenes
+                    .filter((archivo) => archivo.isFile())
+                    .map((archivo) => archivo.name);
+
+                const cantidadImagenes = imgsCarpetas.length;
+
+                //Sacar primera imagen
+                const primeraImagen = imgsCarpetas.length > 0 ? imgsCarpetas[0] : null;
+
+                const urlPrimeraImagen = primeraImagen ? join(urlImagenes, primeraImagen) : null;
+                const archivoBuffer = fs.readFileSync(urlPrimeraImagen);
+                const dimensiones = sizeOf(archivoBuffer);
+
+                const extension = primeraImagen.split('.').pop();
+                const base64Data = archivoBuffer.toString('base64');
+
+                const srcBase64 = `data:image/${extension};base64,${base64Data}`;
+                
+
+                p.IMAGENES = {
+                    carpeta: nombreCarpeta,
+                    fotos: cantidadImagenes,
+                    imagenPrincipal: {
+                        nombre: primeraImagen,
+                        ancho: dimensiones.width,
+                        alto: dimensiones.height,
+                        srcBase64
+                    }
+                }
+
+                postsArray.push(p);
+            }
         }
-        return res.status(200).send({message: "OK!!", data: postsQuery});
+        return res.status(200).send({message: "OK!!", data: postsArray});
     } catch (err) {
         console.log("error", err);
         return res.status(500).json({
             message: "Ha ocurrido un error al listar los Posts por tag",
+        });
+    }
+}
+
+export const listarImagenesPorPosts = async (req, res) => {
+    try {
+        const { UNICO_ARCHIVO, DATOS_ARCHIVO } = req.body;
+
+        //Buscar archivos en el repositorio
+        const urlRepo = join(REPOSITORIO_ARCHIVOS_CLEO, 'posts');
+        const carpetas = await listarPostsCarpetas();
+        
+        const unicoArchivo = UNICO_ARCHIVO === 1;
+        const jsonDatosArchivo = DATOS_ARCHIVO;
+
+        if (!unicoArchivo) {
+            const nombreCarpeta = jsonDatosArchivo.nombreCarpeta;
+            const verificarCarpeta = carpetas.includes(nombreCarpeta);
+            if (!verificarCarpeta) {
+                return res.status(404).json({
+                    message: "La carpeta del post no existe",
+                });
+            }
+
+            const urlCarpeta = join(urlRepo, nombreCarpeta);
+
+            //Imagenes
+            const urlImagenes = join(urlCarpeta, 'Imagenes');
+            const archivosImagenes = await readdir(urlImagenes, { withFileTypes: true });
+            const imgsCarpetas = archivosImagenes
+                .filter((archivo) => archivo.isFile())
+                .map((archivo) => archivo.name);
+
+            const datosImagenes = []
+            for (const img of imgsCarpetas) {
+                const urlImagen = join(urlImagenes, img);
+                const archivoBuffer = fs.readFileSync(urlImagen);
+                const dimensiones = sizeOf(archivoBuffer);
+
+                const extension = img.split('.').pop();
+                const base64Data = archivoBuffer.toString('base64');
+
+                const srcBase64 = `data:image/${extension};base64,${base64Data}`;
+                datosImagenes.push({
+                    nombre: img,
+                    ancho: dimensiones.width,
+                    alto: dimensiones.height,
+                    srcBase64
+                });
+            }
+            return res.status(200).send({message: "OK!!", data: datosImagenes.slice(0,7)});
+        }
+        return res.status(404).json({
+            message: "El post no tiene imágenes o no existe",
+        });
+    } catch (err) {
+        console.log("error", err);
+        return res.status(500).json({
+            message: "Ha ocurrido un error al listar las imágenes por posts",
         });
     }
 }
