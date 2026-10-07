@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { consultarPosts, mostrarPostDetalles, listarPosts, listarGruposTags, listarEtiquetasDinamico, listarTags, listarPostsPorGrupo,
-    listarPostsPorTag, listarImagenesPorPosts
+    listarPostsPorTag, listarImagenesPorPosts, listarTagsPorPost
  } from "../../controllers/BusquedaGeneral/busquedaController.js";
 
 const busquedaRoutes = Router();
@@ -15,5 +15,6 @@ busquedaRoutes.post("/listarTags", listarTags)
 busquedaRoutes.get("/listarPostsPorGrupo/:id_grupo", listarPostsPorGrupo)
 busquedaRoutes.get("/listarPostsPorTag/:id_tag", listarPostsPorTag)
 busquedaRoutes.post("/listarImagenesPorPosts", listarImagenesPorPosts)
+busquedaRoutes.get("/listarTagsPorPost/:postId", listarTagsPorPost)
 
 export default busquedaRoutes;

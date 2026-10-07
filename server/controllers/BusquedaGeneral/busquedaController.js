@@ -409,3 +409,52 @@ export const listarImagenesPorPosts = async (req, res) => {
         });
     }
 }
+
+export const listarTagsPorPost = async (req, res) => {
+    try {
+        const { postId } = req.params;
+
+        if (!postId) {
+            return res.status(400).json({
+                message: "El ID del post es requerido",
+            });
+        }
+
+        // Aquí iría la lógica para listar los tags del post según el postId
+        // Por ejemplo, podrías consultar la base de datos o el repositorio correspondiente
+
+        const filtrostagQuery = []
+        const filtrostagQueryValues = []
+
+        if (postId) {
+            filtrostagQuery.push("pt.ID_POST = ?");
+            filtrostagQueryValues.push(postId);
+        }
+
+        let query = "";
+        if (filtrostagQuery.length > 0) {
+            query = filtrostagQuery.join(" AND ");
+            query = "WHERE " + query;
+        }
+
+        const [tagsQuery] = await pool.query(`SELECT t.*, gt.COLOR_TEXTO AS color FROM TAGS t
+            INNER JOIN GRUPO_TAGS gt ON t.ID_GRUPO = gt.ID
+            INNER JOIN POST_TAGS pt ON t.ID = pt.ID_TAG ${query}`, filtrostagQueryValues);
+
+        if (!tagsQuery || tagsQuery.length === 0) {
+            return res.status(404).json({
+                message: "No se encontraron tags para el post",
+            });
+        }
+
+        return res.status(200).json({
+            message: "OK!!",
+            data: tagsQuery,
+        });
+    } catch (err) {
+        console.log("error", err);
+        return res.status(500).json({
+            message: "Ha ocurrido un error al listar los tags por post",
+        });
+    }
+}
