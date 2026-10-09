@@ -32,3 +32,12 @@ app.use(routes);
 app.listen(PORT, () => {
   console.log(`Microservicios de Busqueda de tags está activo en el puerto ${PORT}.`);
 });
+
+//Verificar coneccion SFTP
+import sftp from './server/lib/sftpSSH.js';
+sftp.on('ready', () => {
+  console.log('Conexión SFTP establecida correctamente.');
+});
+sftp.on('error', (err) => {
+  console.error('Error en la conexión SFTP:', err);
+});

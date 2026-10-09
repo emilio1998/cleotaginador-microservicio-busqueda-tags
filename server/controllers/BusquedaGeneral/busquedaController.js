@@ -2,9 +2,13 @@ import {pool} from '../../lib/db.js'
 import { REPOSITORIO_ARCHIVOS_CLEO } from '../../lib/config.js'
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { listarPostsCarpetas } from '../../lib/serviciosPosts.js'
+import { listarPostsCarpetas, listarPostsCarpetasLinux,
+    listarArchivosDinamicos, listarArchivosDinamicosLinux
+ } from '../../lib/serviciosPosts.js'
 import sizeOf from 'image-size';
 import fs from 'node:fs';
+import sftp from '../../lib/sftpSSH.js'
+import { REPOSITORIO_ARCHIVOS_CLEO_LINUX } from '../../lib/config.js'
 
 const EXTENSIONES_IMAGENES = ['jpg', 'jpeg', 'png', 'gif'];
 const EXTENSIONES_VIDEOS = ['mp4', 'mov', 'avi', 'mkv'];
@@ -249,8 +253,8 @@ export const listarPostsPorTag = async (req, res) => {
         const { id_tag } = req.params;
 
         //Buscar archivos en el repositorio
-        const urlRepo = join(REPOSITORIO_ARCHIVOS_CLEO, 'posts');
-        const carpetas = await listarPostsCarpetas();
+        const urlRepo = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? `${REPOSITORIO_ARCHIVOS_CLEO}/Posts` : join(REPOSITORIO_ARCHIVOS_CLEO, 'posts');
+        const carpetas = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? await listarPostsCarpetasLinux() : await listarPostsCarpetas();
 
 
         // Filtros dinámicos para la consulta de posts en la base de datos
@@ -304,22 +308,19 @@ export const listarPostsPorTag = async (req, res) => {
                     });
                 }
 
-                const urlCarpeta = join(urlRepo, nombreCarpeta);
+                const urlCarpeta = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? `${urlRepo}/${nombreCarpeta}` : join(urlRepo, nombreCarpeta);
 
                 //Imagenes
-                const urlImagenes = join(urlCarpeta, 'Imagenes');
-                const archivosImagenes = await readdir(urlImagenes, { withFileTypes: true });
-                const imgsCarpetas = archivosImagenes
-                    .filter((archivo) => archivo.isFile())
-                    .map((archivo) => archivo.name);
+                const urlImagenes = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? `${urlCarpeta}/Imagenes` : join(urlCarpeta, 'Imagenes');
+                const imgsCarpetas = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? await listarArchivosDinamicosLinux(urlImagenes) : await listarArchivosDinamicos(urlImagenes);
 
                 const cantidadImagenes = imgsCarpetas.length;
 
                 //Sacar primera imagen
                 const primeraImagen = imgsCarpetas.length > 0 ? imgsCarpetas[0] : null;
 
-                const urlPrimeraImagen = primeraImagen ? join(urlImagenes, primeraImagen) : null;
-                const archivoBuffer = fs.readFileSync(urlPrimeraImagen);
+                const urlPrimeraImagen = primeraImagen ? (REPOSITORIO_ARCHIVOS_CLEO_LINUX ? `${urlImagenes}/${primeraImagen}` : join(urlImagenes, primeraImagen)) : null;
+                const archivoBuffer = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? await sftp.get(urlPrimeraImagen) : fs.readFileSync(urlPrimeraImagen);
                 const dimensiones = sizeOf(archivoBuffer);
 
                 const extension = primeraImagen.split('.').pop();
