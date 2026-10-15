@@ -357,8 +357,8 @@ export const listarImagenesPorPosts = async (req, res) => {
         const { UNICO_ARCHIVO, DATOS_ARCHIVO } = req.body;
 
         //Buscar archivos en el repositorio
-        const urlRepo = join(REPOSITORIO_ARCHIVOS_CLEO, 'posts');
-        const carpetas = await listarPostsCarpetas();
+        const urlRepo = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? `${REPOSITORIO_ARCHIVOS_CLEO}/Posts` : join(REPOSITORIO_ARCHIVOS_CLEO, 'posts');
+        const carpetas = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? await listarPostsCarpetasLinux() : await listarPostsCarpetas();
         
         const unicoArchivo = UNICO_ARCHIVO === 1;
         const jsonDatosArchivo = DATOS_ARCHIVO;
@@ -372,19 +372,16 @@ export const listarImagenesPorPosts = async (req, res) => {
                 });
             }
 
-            const urlCarpeta = join(urlRepo, nombreCarpeta);
+            const urlCarpeta = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? `${urlRepo}/${nombreCarpeta}` : join(urlRepo, nombreCarpeta);
 
             //Imagenes
-            const urlImagenes = join(urlCarpeta, 'Imagenes');
-            const archivosImagenes = await readdir(urlImagenes, { withFileTypes: true });
-            const imgsCarpetas = archivosImagenes
-                .filter((archivo) => archivo.isFile())
-                .map((archivo) => archivo.name);
+            const urlImagenes = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? `${urlCarpeta}/Imagenes` : join(urlCarpeta, 'Imagenes');
+            const imgsCarpetas = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? await listarArchivosDinamicosLinux(urlImagenes) : await listarArchivosDinamicos(urlImagenes);
 
             const datosImagenes = []
             for (const img of imgsCarpetas) {
-                const urlImagen = join(urlImagenes, img);
-                const archivoBuffer = fs.readFileSync(urlImagen);
+                const urlImagen = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? `${urlImagenes}/${img}` : join(urlImagenes, img);
+                const archivoBuffer = REPOSITORIO_ARCHIVOS_CLEO_LINUX ? await sftp.get(urlImagen) : fs.readFileSync(urlImagen);
                 const dimensiones = sizeOf(archivoBuffer);
 
                 const extension = img.split('.').pop();
