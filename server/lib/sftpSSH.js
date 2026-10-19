@@ -1,4 +1,5 @@
 import SftpClient from 'ssh2-sftp-client';
+import { ENTORNO } from './config.js';
 
 const sftp = new SftpClient();
 
@@ -9,6 +10,18 @@ const config = {
     password: process.env.SFTP_PASSWORD
 }
 
-sftp.connect(config);
+async function connectSFTP() {
+    try {
+        await sftp.connect(config);
+        console.log('Conexión SFTP establecida correctamente.');
+    } catch (error) {
+        if (ENTORNO === 'DEV') {
+            console.log('Modo desarrollo, corriendo a pesar del error SFTP:', error);
+        } else 
+            throw new Error(`Error conectando a SFTP: ${error}`);
+    }
+}
+
+connectSFTP();
 
 export default sftp;
